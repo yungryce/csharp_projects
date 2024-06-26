@@ -1,32 +1,51 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using System;
+using TaskManager.Models;
 
-namespace TaskManager
+
+namespace TaskManager.Data
 {
     public class TaskDbContext : DbContext
     {
-        public DbSet<User> Users { get; set; }
-        public DbSet<Task> Tasks { get; set; }
-        public DbSet<UserTask> UserTasks { get; set; }
+        public TaskDbContext(DbContextOptions<TaskDbContext> options) : base(options)
+        {
+        }
+
+        // DbSet for each entity
+        public DbSet<Models.User> Users { get; set; }
+        public DbSet<Models.Task> Tasks { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            optionsBuilder.UseNpgsql("Host=localhost;Database=taskmanager;Username=taskuser;Password=your_password");
+            // Configure PostgreSQL connection using environment variables
+            if (!optionsBuilder.IsConfigured)
+            {
+                IConfigurationRoot configuration = new ConfigurationBuilder()
+                    .AddEnvironmentVariables()
+                    .Build();
+
+                string connectionString = configuration.GetConnectionString("TaskDbConnection") 
+                        ?? throw new InvalidOperationException("TaskDbConnection is not configured.");
+                optionsBuilder.UseNpgsql(connectionString);
+            }
         }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            modelBuilder.Entity<UserTask>()
-                .HasKey(ut => new { ut.UserId, ut.TaskId });
+            // Configure modelBuilder for any additional settings or relationships
+            modelBuilder.Entity<Models.User>()
+                .HasMany(u => u.Tasks)
+                .WithOne(t => t.User)
+                .HasForeignKey(t => t.UserId);
 
-            modelBuilder.Entity<UserTask>()
-                .HasOne(ut => ut.User)
-                .WithMany(u => u.UserTasks)
-                .HasForeignKey(ut => ut.UserId);
+            modelBuilder.Entity<Models.Task>()
+                .HasOne(t => t.User)
+                .WithMany(u => u.Tasks)
+                .HasForeignKey(t => t.UserId);
 
-            modelBuilder.Entity<UserTask>()
-                .HasOne(ut => ut.Task)
-                .WithMany(t => t.UserTasks)
-                .HasForeignKey(ut => ut.TaskId);
+            // Call base OnModelCreating to configure base DbContext behavior
+            base.OnModelCreating(modelBuilder);
         }
     }
 }
